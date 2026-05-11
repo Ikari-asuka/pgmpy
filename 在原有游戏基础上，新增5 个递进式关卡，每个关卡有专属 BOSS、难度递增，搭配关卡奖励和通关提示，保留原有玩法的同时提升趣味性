@@ -1,0 +1,239 @@
+import random
+import time
+
+# 游戏欢迎界面
+def print_slow(text, delay=0.04):
+    """慢慢打印文字，更有游戏感"""
+    for char in text:
+        print(char, end='', flush=True)
+        time.sleep(delay)
+    print()
+
+# 玩家类
+class Player:
+    def __init__(self, name):
+        self.name = name
+        self.hp = 100
+        self.attack = 15
+        self.defense = 5
+        self.level = 1
+        self.exp = 0
+        self.gold = 20
+        self.current_level = 1  # 玩家当前关卡
+        self.max_level = 5      # 最大关卡
+
+    def show_status(self):
+        print(f"\n===== {self.name} 状态 =====")
+        print(f"等级: {self.level} | 当前关卡: {self.current_level}/{self.max_level}")
+        print(f"生命值: {self.hp}")
+        print(f"攻击: {self.attack}")
+        print(f"防御: {self.defense}")
+        print(f"金币: {self.gold}")
+        print(f"经验: {self.exp}/{self.level*20}")
+        print("==========================\n")
+
+    def level_up(self):
+        need_exp = self.level * 20
+        while self.exp >= need_exp:
+            self.level += 1
+            self.exp -= need_exp
+            self.hp += 20
+            self.attack += 4
+            self.defense += 2
+            print_slow(f"\n🎉 恭喜你升级了！现在是 {self.level} 级！")
+            self.show_status()
+
+    def level_clear_reward(self):
+        """关卡通关奖励"""
+        reward_gold = self.current_level * 50
+        reward_exp = self.current_level * 30
+        self.gold += reward_gold
+        self.exp += reward_exp
+        print_slow(f"\n🏆 关卡{self.current_level}通关奖励！")
+        print_slow(f"获得 {reward_gold} 金币 + {reward_exp} 经验！")
+        self.level_up()
+
+# 敌人类（普通怪物）
+class Enemy:
+    def __init__(self, level):
+        # 怪物难度随关卡提升
+        types = ["哥布林", "野狼", "骷髅兵", "小恶魔", "毒蜘蛛"]
+        self.name = random.choice(types)
+        # 关卡越高，怪物属性越强
+        self.hp = 40 + (level - 1) * 15 + random.randint(0, 30)
+        self.attack = 8 + (level - 1) * 3 + random.randint(0, 7)
+        self.gold_drop = random.randint(5 + (level - 1)*2, 15 + (level - 1)*3)
+        self.exp_drop = random.randint(8 + (level - 1)*2, 18 + (level - 1)*3)
+
+# BOSS类（每个关卡专属）
+class Boss:
+    def __init__(self, level):
+        # 每个关卡对应专属BOSS
+        boss_info = {
+            1: {"name": "哥布林首领", "hp": 120, "attack": 25, "skill": "狂怒一击", "gold": 100, "exp": 80},
+            2: {"name": "森林巨狼", "hp": 180, "attack": 35, "skill": "撕咬", "gold": 150, "exp": 120},
+            3: {"name": "骷髅将军", "hp": 250, "attack": 45, "skill": "横扫", "gold": 200, "exp": 180},
+            4: {"name": "恶魔使者", "hp": 320, "attack": 55, "skill": "火焰冲击", "gold": 280, "exp": 250},
+            5: {"name": "黑暗领主", "hp": 450, "attack": 70, "skill": "黑暗吞噬", "gold": 400, "exp": 350}
+        }
+        self.name = boss_info[level]["name"]
+        self.hp = boss_info[level]["hp"]
+        self.attack = boss_info[level]["attack"]
+        self.skill = boss_info[level]["skill"]
+        self.gold_drop = boss_info[level]["gold"]
+        self.exp_drop = boss_info[level]["exp"]
+
+# 关卡战斗逻辑
+def level_battle(player):
+    """当前关卡战斗：先清小怪，再打BOSS"""
+    current_level = player.current_level
+    print_slow(f"\n===== 进入关卡 {current_level} =====")
+    print_slow(f"关卡目标：清除小怪，击败BOSS【{Boss(current_level).name}】")
+    print_slow(f"提示：关卡{current_level}共有{current_level + 1}只小怪，清完小怪才能挑战BOSS！\n")
+
+    # 1. 清除当前关卡小怪
+    monster_count = current_level + 1  # 关卡越高，小怪越多
+    for i in range(monster_count):
+        if player.hp <= 0:
+            break
+        enemy = Enemy(current_level)
+        print_slow(f"\n⚠️  遭遇第{i+1}只小怪：{enemy.name}")
+        
+        # 小怪战斗循环
+        while enemy.hp > 0 and player.hp > 0:
+            print(f"\n你的HP：{player.hp}  |  {enemy.name} HP：{enemy.hp}")
+            action = input("1. 攻击  2. 逃跑：")
+
+            if action == "1":
+                # 玩家攻击
+                damage = max(1, player.attack - enemy.hp // 10)
+                enemy.hp -= damage
+                print_slow(f"你对 {enemy.name} 造成了 {damage} 点伤害！")
+
+                # 敌人反击
+                if enemy.hp > 0:
+                    enemy_damage = max(1, enemy.attack - player.defense)
+                    player.hp -= enemy_damage
+                    print_slow(f"{enemy.name} 反击，造成 {enemy_damage} 点伤害！")
+
+            elif action == "2":
+                print_slow("你成功逃跑了！小怪还在原地，快来击败它吧！")
+                break
+
+            else:
+                print("输入错误，请重新选择！")
+
+        # 击败小怪奖励
+        if enemy.hp <= 0:
+            print_slow(f"\n✅ 击败了第{i+1}只小怪 {enemy.name}！")
+            player.gold += enemy.gold_drop
+            player.exp += enemy.exp_drop
+            print_slow(f"获得 {enemy.gold_drop} 金币 + {enemy.exp_drop} 经验！")
+            player.level_up()
+
+    # 2. 小怪清完，挑战BOSS
+    if player.hp > 0 and monster_count == len([1 for i in range(monster_count)]):
+        boss = Boss(current_level)
+        print_slow(f"\n🔥 小怪已全部清除！BOSS【{boss.name}】登场！")
+        print_slow(f"BOSS技能：{boss.skill} - 有30%概率造成双倍伤害！")
+
+        # BOSS战斗循环
+        while boss.hp > 0 and player.hp > 0:
+            print(f"\n你的HP：{player.hp}  |  BOSS【{boss.name}】HP：{boss.hp}")
+            action = input("1. 攻击  2. 逃跑（逃跑失败会被BOSS重击）：")
+
+            if action == "1":
+                # 玩家攻击
+                damage = max(1, player.attack - boss.hp // 15)
+                boss.hp -= damage
+                print_slow(f"你对 {boss.name} 造成了 {damage} 点伤害！")
+
+                # BOSS攻击（有概率释放技能）
+                if boss.hp > 0:
+                    skill_prob = random.random()
+                    if skill_prob <= 0.3:
+                        # 释放技能，双倍伤害
+                        boss_damage = max(1, boss.attack * 2 - player.defense)
+                        player.hp -= boss_damage
+                        print_slow(f"⚠️  {boss.name} 释放技能【{boss.skill}】！造成 {boss_damage} 点双倍伤害！")
+                    else:
+                        # 普通攻击
+                        boss_damage = max(1, boss.attack - player.defense)
+                        player.hp -= boss_damage
+                        print_slow(f"{boss.name} 攻击，造成 {boss_damage} 点伤害！")
+
+            elif action == "2":
+                # 逃跑有50%概率失败
+                escape_prob = random.random()
+                if escape_prob <= 0.5:
+                    print_slow("逃跑失败！被BOSS重击！")
+                    boss_damage = max(1, boss.attack * 1.5 - player.defense)
+                    player.hp -= boss_damage
+                    print_slow(f"受到 {boss_damage} 点伤害！")
+                else:
+                    print_slow("你成功逃跑了！BOSS还在原地，准备好再挑战吧！")
+                    break
+
+            else:
+                print("输入错误，请重新选择！")
+
+        # BOSS战斗结束
+        if boss.hp <= 0:
+            print_slow(f"\n🏆 恭喜击败BOSS【{boss.name}】！")
+            player.gold += boss.gold_drop
+            player.exp += boss.exp_drop
+            print_slow(f"获得 {boss.gold_drop} 金币 + {boss.exp_drop} 经验！")
+            # 关卡通关，解锁下一关
+            player.level_clear_reward()
+            if player.current_level< player.max_level:
+                player.current_level += 1
+                print_slow(f"\n🚪 关卡{current_level}通关！解锁关卡{player.current_level}！")
+            else:
+                print_slow(f"\n🎉 恭喜你通关所有{player.max_level}个关卡！成为冒险王者！")
+                return "win"  # 通关标志
+
+    # 玩家死亡
+    if player.hp <= 0:
+        print_slow("\n💀 你被击败了...游戏结束")
+        return "game_over"
+
+# 游戏主逻辑
+def game():
+    print_slow("===== 欢迎来到文字冒险闯关世界 =====")
+    name = input("请输入你的名字：")
+    player = Player(name)
+    print_slow(f"\n你好，{player.name}！你的冒险闯关开始了！")
+    player.show_status()
+
+    while True:
+        print(f"\n===== 主菜单（当前关卡：{player.current_level}/{player.max_level}）=====")
+        print("1. 挑战当前关卡")
+        print("2. 查看状态")
+        print("3. 退出游戏")
+        choice = input("请选择操作：")
+
+        if choice == "1":
+            # 挑战当前关卡
+            result = level_battle(player)
+            if result == "win":
+                # 通关所有关卡，游戏结束
+                print_slow("\n===== 游戏结束 =====")
+                print_slow(f"恭喜{player.name}，成功通关所有关卡，成为冒险传奇！")
+                print_slow(f"最终等级：{player.level} 级 | 最终金币：{player.gold}")
+                break
+            elif result == "game_over":
+                break
+
+        elif choice == "2":
+            player.show_status()
+
+        elif choice == "3":
+            print_slow("\n感谢游玩，下次再见！")
+            break
+
+        else:
+            print("输入错误，请重新选择！")
+
+# 启动游戏
+if __name__ == "__main__":
+    game()
