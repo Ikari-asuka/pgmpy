@@ -1,0 +1,323 @@
+import random
+import time
+
+# ============ 全局难度-移动速度（直接改这里）============
+MONSTER_MOVE_CD = 3       # 小怪移动冷却（越大越慢）
+MONSTER_MOVE_PROB = 0.6   # 小怪移动概率
+BOSS_MOVE_CD = 2          # BOSS移动冷却
+BOSS_MOVE_PROB = 0.8      # BOSS移动概率
+# ==========================================================
+
+def print_slow(text, delay=0.04):
+    for char in text:
+        print(char, end='', flush=True)
+        time.sleep(delay)
+    print()
+
+# ---------------------- 道具类 ----------------------
+class Item:
+    def __init__(self, name, desc, item_type, value):
+        self.name = name
+        self.desc = desc
+        self.item_type = item_type
+        self.value = value
+
+    def use(self, player):
+        if self.item_type == "heal":
+            player.hp += self.value
+            print_slow(f"💚 使用{self.name}，恢复 {self.value} 点生命！")
+        elif self.item_type == "attack":
+            player.attack += self.value
+            print_slow(f"⚔️ 使用{self.name}，攻击 +{self.value}！")
+        elif self.item_type == "defense":
+            player.defense += self.value
+            print_slow(f"🛡️ 使用{self.name}，防御 +{self.value}！")
+
+    def __str__(self):
+        return f"{self.name}：{self.desc}"
+
+ITEM_DB = [
+    Item("小型回血药", "恢复25点生命", "heal", 25),
+    Item("大型回血药", "恢复60点生命", "heal", 60),
+    Item("力量药剂", "临时增加8点攻击", "attack", 8),
+    Item("铁盾", "临时增加5点防御", "defense", 5)
+]
+
+# ---------------------- 玩家类 ----------------------
+class Player:
+    def __init__(self, name):
+        self.name = name
+        self.hp = 150
+        self.attack = 18
+        self.defense = 8
+        self.level = 1
+        self.exp = 0
+        self.gold = 30
+        self.current_level = 1
+        self.max_level = 5
+        self.inventory = []
+
+    def show_status(self):
+        print(f"\n===== {self.name} 状态 =====")
+        print(f"等级: {self.level} | 当前关卡: {self.current_level}/{self.max_level}")
+        print(f"生命值: {self.hp}")
+        print(f"攻击: {self.attack}")
+        print(f"防御: {self.defense}")
+        print(f"金币: {self.gold}")
+        print(f"经验: {self.exp}/{self.level*15}")
+        print("==========================\n")
+
+    def show_inventory(self):
+        print("\n🎒 背包：")
+        if not self.inventory:
+            print("空空如也...")
+            return
+        for i, item in enumerate(self.inventory):
+            print(f"[{i+1}] {item}")
+
+    def add_item(self, item):
+        self.inventory.append(item)
+        print_slow(f"✨ 获得道具：{item.name}")
+
+    def use_item(self, index):
+        if 0 <= index < len(self.inventory):
+            item = self.inventory.pop(index)
+            item.use(self)
+        else:
+            print("❌ 没有这个道具！")
+
+    def level_up(self):
+        need_exp = self.level * 15
+        while self.exp >= need_exp:
+            self.level += 1
+            self.exp -= need_exp
+            self.hp += 25
+            self.attack += 5
+            self.defense += 3
+            print_slow(f"\n🎉 恭喜你升级了！现在是 {self.level} 级！")
+
+    def level_clear_reward(self):
+        reward_gold = self.current_level * 60
+        reward_exp = self.current_level * 40
+        self.gold += reward_gold
+        self.exp += reward_exp
+        print_slow(f"\n🏆 关卡{self.current_level}通关奖励！")
+        print_slow(f"获得 {reward_gold} 金币 + {reward_exp} 经验！")
+        self.level_up()
+
+# ---------------------- 敌人（带移动速度） ----------------------
+class Enemy:
+    def __init__(self, level):
+        types = ["哥布林", "野狼", "骷髅兵", "小恶魔", "毒蜘蛛"]
+        self.name = random.choice(types)
+        self.hp = 25 + (level - 1) * 8 + random.randint(0, 15)
+        self.attack = 3 + (level - 1) * 1 + random.randint(0, 2)
+        self.gold_drop = random.randint(8, 20)
+        self.exp_drop = random.randint(10, 25)
+
+        # ==== 移动速度（全局参数） ====
+        self.move_cd = MONSTER_MOVE_CD
+        self.move_prob = MONSTER_MOVE_PROB
+        self.move_counter = 0
+
+        # ==== 攻击频率 ====
+        self.attack_cd = 2
+        self.cd_counter = 0
+        self.attack_prob = 0.7
+
+    def try_move(self):
+        # 尝试向玩家靠近（文字提示）
+        if self.move_counter > 0:
+            self.move_counter -= 1
+            return False
+        if random.random() < self.move_prob:
+            self.move_counter = self.move_cd
+            return True
+        return False
+
+    def drop_item(self):
+        if random.random() < 0.6:
+            return random.choice(ITEM_DB)
+        return None
+
+    def try_attack(self):
+        if self.cd_counter > 0:
+            self.cd_counter -= 1
+            return False
+        if random.random() < self.attack_prob:
+            self.cd_counter = self.attack_cd
+            return True
+        return False
+
+# ---------------------- BOSS（带移动速度） ----------------------
+class Boss:
+    def __init__(self, level):
+        boss_info = {
+            1: {"name": "哥布林首领", "hp": 60, "attack": 6, "skill": "狂怒一击", "gold": 100, "exp": 80},
+            2: {"name": "森林巨狼", "hp": 90, "attack": 9, "skill": "撕咬", "gold": 150, "exp": 120},
+            3: {"name": "骷髅将军", "hp": 130, "attack": 12, "skill": "横扫", "gold": 200, "exp": 180},
+            4: {"name": "恶魔使者", "hp": 180, "attack": 16, "skill": "火焰冲击", "gold": 280, "exp": 250},
+            5: {"name": "黑暗领主", "hp": 250, "attack": 20, "skill": "黑暗吞噬", "gold": 400, "exp": 350}
+        }
+        self.name = boss_info[level]["name"]
+        self.hp = boss_info[level]["hp"]
+        self.attack = boss_info[level]["attack"]
+        self.skill = boss_info[level]["skill"]
+        self.gold_drop = boss_info[level]["gold"]
+        self.exp_drop = boss_info[level]["exp"]
+
+        # ==== BOSS移动速度 ====
+        self.move_cd = BOSS_MOVE_CD
+        self.move_prob = BOSS_MOVE_PROB
+        self.move_counter = 0
+
+        # ==== BOSS攻击频率 ====
+        self.attack_cd = 1
+        self.cd_counter = 0
+        self.attack_prob = 0.85
+
+    def try_move(self):
+        if self.move_counter > 0:
+            self.move_counter -= 1
+            return False
+        if random.random() < self.move_prob:
+            self.move_counter = self.move_cd
+            return True
+        return False
+
+    def try_attack(self):
+        if self.cd_counter > 0:
+            self.cd_counter -= 1
+            return False
+        if random.random() < self.attack_prob:
+            self.cd_counter = self.attack_cd
+            return True
+        return False
+
+# ---------------------- 关卡战斗（加入移动提示） ----------------------
+def level_battle(player):
+    current_level = player.current_level
+    print_slow(f"\n===== 进入关卡 {current_level} =====")
+    print_slow(f"关卡目标：清除小怪，击败BOSS【{Boss(current_level).name}】")
+    monster_count = current_level + 1
+
+    for i in range(monster_count):
+        if player.hp <= 0:
+            break
+        enemy = Enemy(current_level)
+        print_slow(f"\n⚠️ 遭遇第{i+1}只小怪：{enemy.name}")
+
+        while enemy.hp > 0 and player.hp > 0:
+            print(f"\n你的HP：{player.hp}  |  {enemy.name} HP：{enemy.hp}")
+            action = input("1. 攻击  2. 逃跑：")
+            if action == "1":
+                damage = max(1, player.attack - enemy.hp // 10)
+                enemy.hp -= damage
+                print_slow(f"你对 {enemy.name} 造成了 {damage} 点伤害！")
+
+                # 怪物先移动，再攻击
+                if enemy.hp > 0:
+                    if enemy.try_move():
+                        print_slow(f"👣 {enemy.name} 向你靠近了！")
+                    if enemy.try_attack():
+                        dmg = max(1, enemy.attack - player.defense)
+                        player.hp -= dmg
+                        print_slow(f"{enemy.name} 反击，{dmg} 伤害！")
+            elif action == "2":
+                print_slow("你逃跑了！")
+                break
+            else:
+                print("输入错误！")
+
+        if enemy.hp <= 0:
+            print_slow(f"\n✅ 击败 {enemy.name}！")
+            player.gold += enemy.gold_drop
+            player.exp += enemy.exp_drop
+            item = enemy.drop_item()
+            if item:
+                player.add_item(item)
+            player.level_up()
+
+    if player.hp > 0:
+        boss = Boss(current_level)
+        print_slow(f"\n🔥 BOSS【{boss.name}】登场！技能：{boss.skill}")
+        while boss.hp > 0 and player.hp > 0:
+            print(f"\n你的HP：{player.hp}  |  BOSS HP：{boss.hp}")
+            action = input("1. 攻击  2. 逃跑：")
+            if action == "1":
+                dmg = max(1, player.attack - boss.hp // 15)
+                boss.hp -= dmg
+                print_slow(f"你造成 {dmg} 伤害！")
+
+                if boss.hp > 0:
+                    if boss.try_move():
+                        print_slow(f"👣 BOSS 向你逼近！")
+                    if boss.try_attack():
+                        if random.random() < 0.2:
+                            bd = max(1, boss.attack * 1.2 - player.defense)
+                            player.hp -= bd
+                            print_slow(f"⚠️ BOSS技能！{bd} 伤害！")
+                        else:
+                            bd = max(1, boss.attack - player.defense)
+                            player.hp -= bd
+                            print_slow(f"BOSS攻击 {bd} 伤害！")
+            elif action == "2":
+                if random.random() < 0.3:
+                    print_slow("逃跑失败！被重击！")
+                    player.hp -= max(1, boss.attack * 1.2 - player.defense)
+                else:
+                    print_slow("逃跑成功！")
+                    break
+        if boss.hp <= 0:
+            print_slow(f"\n🏆 击败BOSS【{boss.name}】！")
+            player.gold += boss.gold_drop
+            player.exp += boss.exp_drop
+            player.level_clear_reward()
+            if player.current_level < player.max_level:
+                player.current_level += 1
+                print_slow(f"\n🚪 解锁关卡{player.current_level}！")
+            else:
+                print_slow("\n🎉 全部通关！你是冒险王者！")
+                return "win"
+    if player.hp <= 0:
+        print_slow("\n💀 你被击败了…游戏结束")
+        return "game_over"
+
+# ---------------------- 主菜单 ----------------------
+def game():
+    print_slow("===== 文字冒险闯关世界（带移动速度版） =====")
+    name = input("请输入名字：")
+    player = Player(name)
+    print_slow(f"\n你好，{player.name}！冒险开始！")
+
+    while True:
+        print(f"\n===== 主菜单（关卡：{player.current_level}/{player.max_level}）=====")
+        print("1. 挑战当前关卡")
+        print("2. 查看状态")
+        print("3. 查看背包")
+        print("4. 使用道具")
+        print("5. 退出游戏")
+        choice = input("请选择：")
+
+        if choice == "1":
+            res = level_battle(player)
+            if res in ("win", "game_over"):
+                break
+        elif choice == "2":
+            player.show_status()
+        elif choice == "3":
+            player.show_inventory()
+        elif choice == "4":
+            player.show_inventory()
+            if player.inventory:
+                idx = input("输入要使用的道具编号：")
+                if idx.isdigit():
+                    player.use_item(int(idx)-1)
+        elif choice == "5":
+            print_slow("👋 再见！")
+            break
+        else:
+            print("输入错误！")
+
+if __name__ == "__main__":
+    game()
